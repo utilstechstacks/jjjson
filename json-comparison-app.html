@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comparador de Archivos JSON Mejorado</title>
+    <title>Comparador de Archivos JSON con Opción de Preservar Orden</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <style>
         body {
@@ -53,15 +53,18 @@
     </style>
 </head>
 <body>
-    <h1>Comparador de Archivos JSON Mejorado</h1>
+    <h1>Comparador de Archivos JSON con Opción de Preservar Orden</h1>
     <div class="config">
         <label for="suffix1">Sufijo 1:</label>
         <input type="text" id="suffix1" value="_extremo">
         <label for="suffix2">Sufijo 2:</label>
         <input type="text" id="suffix2" value="_centro">
+        <label for="preserveOrder">
+            <input type="checkbox" id="preserveOrder" checked> Preservar orden original
+        </label>
     </div>
     <div>
-        <textarea id="json1" placeholder="Pegue el primer JSON aquí (no se compara)"></textarea>
+        <textarea id="json1" placeholder="Pegue el primer JSON aquí (usar Sufijo 1)"></textarea>
         <textarea id="json2" placeholder="Pegue el segundo JSON aquí (usar Sufijo 2)"></textarea>
         <textarea id="json3" placeholder="Pegue el tercer JSON aquí (usar Sufijo 1)"></textarea>
         <button onclick="compareJSON()">Comparar</button>
@@ -81,13 +84,14 @@
             }
         }
 
-        function removeSuffix(key, suffix1, suffix2) {
-            return key.replace(new RegExp(`${suffix1}$`), '').replace(new RegExp(`${suffix2}$`), '');
+        function removeSuffix(key, suffix) {
+            return key.replace(new RegExp(`${suffix}$`), '');
         }
 
         function compareJSON() {
             const suffix1 = $("#suffix1").val();
             const suffix2 = $("#suffix2").val();
+            const preserveOrder = $("#preserveOrder").is(":checked");
             const json1 = parseJSON($("#json1").val());
             const json2 = parseJSON($("#json2").val());
             const json3 = parseJSON($("#json3").val());
@@ -97,36 +101,46 @@
                 return;
             }
 
-            const allKeys = new Set([
-                ...Object.keys(json1).map(k => removeSuffix(k, suffix1, suffix2)),
-                ...Object.keys(json2).map(k => removeSuffix(k, suffix1, suffix2)),
-                ...Object.keys(json3).map(k => removeSuffix(k, suffix1, suffix2))
+            const keys1 = Object.keys(json1).filter(k => k.endsWith(suffix1));
+            const keys2 = Object.keys(json2).filter(k => k.endsWith(suffix2));
+            const keys3 = Object.keys(json3).filter(k => k.endsWith(suffix1));
+
+            let allBaseKeys = new Set([
+                ...keys1.map(k => removeSuffix(k, suffix1)),
+                ...keys2.map(k => removeSuffix(k, suffix2)),
+                ...keys3.map(k => removeSuffix(k, suffix1))
             ]);
+
+            if (!preserveOrder) {
+                allBaseKeys = new Set([...allBaseKeys].sort());
+            }
 
             let html1 = '', html2 = '', html3 = '';
 
-            allKeys.forEach(baseKey => {
-                const key1 = Object.keys(json1).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
-                const key2 = Object.keys(json2).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
-                const key3 = Object.keys(json3).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
+            allBaseKeys.forEach(baseKey => {
+                const key1 = keys1.find(k => removeSuffix(k, suffix1) === baseKey);
+                const key2 = keys2.find(k => removeSuffix(k, suffix2) === baseKey);
+                const key3 = keys3.find(k => removeSuffix(k, suffix1) === baseKey);
 
-                const value1 = json1[key1];
-                const value2 = json2[key2];
-                const value3 = json3[key3];
+                const value1 = key1 ? json1[key1] : undefined;
+                const value2 = key2 ? json2[key2] : undefined;
+                const value3 = key3 ? json3[key3] : undefined;
 
-                const match = value2 === value3 && value2 !== undefined;
+                const match23 = value2 === value3 && value2 !== undefined;
 
-                html1 += `<pre>${key1}: ${JSON.stringify(value1)}</pre>`;
-                
+                if (key1) {
+                    html1 += `<pre>${key1}: ${JSON.stringify(value1)}</pre>`;
+                }
+
                 if (key2) {
-                    html2 += `<pre class="${match ? 'match' : 'diff'}">${key2}: ${JSON.stringify(value2)}</pre>`;
-                } else {
+                    html2 += `<pre class="${match23 ? 'match' : 'diff'}">${key2}: ${JSON.stringify(value2)}</pre>`;
+                } else if (keys1.some(k => removeSuffix(k, suffix1) === baseKey) || keys3.some(k => removeSuffix(k, suffix1) === baseKey)) {
                     html2 += `<pre class="missing">${baseKey}${suffix2}: (valor faltante)</pre>`;
                 }
 
                 if (key3) {
-                    html3 += `<pre class="${match ? 'match' : 'diff'}">${key3}: ${JSON.stringify(value3)}</pre>`;
-                } else {
+                    html3 += `<pre class="${match23 ? 'match' : 'diff'}">${key3}: ${JSON.stringify(value3)}</pre>`;
+                } else if (keys2.some(k => removeSuffix(k, suffix2) === baseKey)) {
                     html3 += `<pre class="missing">${baseKey}${suffix1}: (valor faltante)</pre>`;
                 }
             });
