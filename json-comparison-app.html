@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparador de Archivos JSON Mejorado</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-grow: 1;
+        }
+        .panel {
+            flex: 1;
+            margin: 0 10px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .diff {
+            background-color: #ffcccc;
+        }
+        .match {
+            background-color: #ccffcc;
+        }
+        .missing {
+            background-color: #f0f0f0;
+            color: #666666;
+        }
+        .config {
+            margin-bottom: 10px;
+        }
+        .config input {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Comparador de Archivos JSON Mejorado</h1>
+    <div class="config">
+        <label for="suffix1">Sufijo 1:</label>
+        <input type="text" id="suffix1" value="_extremo">
+        <label for="suffix2">Sufijo 2:</label>
+        <input type="text" id="suffix2" value="_centro">
+    </div>
+    <div>
+        <textarea id="json1" placeholder="Pegue el primer JSON aquí (no se compara)"></textarea>
+        <textarea id="json2" placeholder="Pegue el segundo JSON aquí (usar Sufijo 2)"></textarea>
+        <textarea id="json3" placeholder="Pegue el tercer JSON aquí (usar Sufijo 1)"></textarea>
+        <button onclick="compareJSON()">Comparar</button>
+    </div>
+    <div class="container">
+        <div id="panel1" class="panel"></div>
+        <div id="panel2" class="panel"></div>
+        <div id="panel3" class="panel"></div>
+    </div>
+
+    <script>
+        function parseJSON(json) {
+            try {
+                return JSON.parse(json);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function removeSuffix(key, suffix1, suffix2) {
+            return key.replace(new RegExp(`${suffix1}$`), '').replace(new RegExp(`${suffix2}$`), '');
+        }
+
+        function compareJSON() {
+            const suffix1 = $("#suffix1").val();
+            const suffix2 = $("#suffix2").val();
+            const json1 = parseJSON($("#json1").val());
+            const json2 = parseJSON($("#json2").val());
+            const json3 = parseJSON($("#json3").val());
+
+            if (!json1 || !json2 || !json3) {
+                alert("Error: Uno o más JSON son inválidos");
+                return;
+            }
+
+            const allKeys = new Set([
+                ...Object.keys(json1).map(k => removeSuffix(k, suffix1, suffix2)),
+                ...Object.keys(json2).map(k => removeSuffix(k, suffix1, suffix2)),
+                ...Object.keys(json3).map(k => removeSuffix(k, suffix1, suffix2))
+            ]);
+
+            let html1 = '', html2 = '', html3 = '';
+
+            allKeys.forEach(baseKey => {
+                const key1 = Object.keys(json1).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
+                const key2 = Object.keys(json2).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
+                const key3 = Object.keys(json3).find(k => removeSuffix(k, suffix1, suffix2) === baseKey) || '';
+
+                const value1 = json1[key1];
+                const value2 = json2[key2];
+                const value3 = json3[key3];
+
+                const match = value2 === value3 && value2 !== undefined;
+
+                html1 += `<pre>${key1}: ${JSON.stringify(value1)}</pre>`;
+                
+                if (key2) {
+                    html2 += `<pre class="${match ? 'match' : 'diff'}">${key2}: ${JSON.stringify(value2)}</pre>`;
+                } else {
+                    html2 += `<pre class="missing">${baseKey}${suffix2}: (valor faltante)</pre>`;
+                }
+
+                if (key3) {
+                    html3 += `<pre class="${match ? 'match' : 'diff'}">${key3}: ${JSON.stringify(value3)}</pre>`;
+                } else {
+                    html3 += `<pre class="missing">${baseKey}${suffix1}: (valor faltante)</pre>`;
+                }
+            });
+
+            $("#panel1").html(html1);
+            $("#panel2").html(html2);
+            $("#panel3").html(html3);
+        }
+    </script>
+</body>
+</html>
