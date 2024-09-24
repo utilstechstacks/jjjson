@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formateador y Limpiador de JSON</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+        }
+        button {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Formateador y Limpiador de JSON</h1>
+    <textarea id="input" placeholder="Pega tu JSON aquí"></textarea>
+    <button onclick="formatAndCleanJSON()">Formatear y Limpiar</button>
+    <h2>Resultado:</h2>
+    <pre id="output"></pre>
+
+    <script>
+        function cleanValue(value) {
+            if (typeof value === 'string') {
+                if (value.toLowerCase() === 'true') return true;
+                if (value.toLowerCase() === 'false') return false;
+                if (/^"?\d+(\.\d+)?"?$/.test(value)) {
+                    return Number(value.replace(/"/g, ''));
+                }
+            }
+            return value;
+        }
+
+        function cleanObject(obj) {
+            if (Array.isArray(obj)) {
+                return obj.map(cleanObject);
+            } else if (typeof obj === 'object' && obj !== null) {
+                const newObj = {};
+                for (const [key, value] of Object.entries(obj)) {
+                    newObj[key] = cleanObject(value);
+                }
+                return newObj;
+            }
+            return cleanValue(obj);
+        }
+
+        function formatAndCleanJSON() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+
+            try {
+                let parsedJSON = JSON.parse(input);
+                let cleanedJSON = cleanObject(parsedJSON);
+                let formattedJSON = JSON.stringify(cleanedJSON, null, 2);
+                output.textContent = formattedJSON;
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
