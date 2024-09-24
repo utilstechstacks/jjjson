@@ -32,7 +32,8 @@
             if (typeof value === 'string') {
                 if (value.toLowerCase() === 'true') return true;
                 if (value.toLowerCase() === 'false') return false;
-                if (/^"?\d+(\.\d+)?"?$/.test(value)) {
+                // Modificada para incluir números negativos
+                if (/^"?-?\d+(\.\d+)?"?$/.test(value)) {
                     return Number(value.replace(/"/g, ''));
                 }
             }
