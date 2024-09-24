@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparador de Archivos JSON Mejorado</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            margin-top: 1em;
+        }
+        .panel-row {
+            display: flex;
+            flex-grow: 1;
+            margin-bottom: 1em;
+        }
+        .panel {
+            flex: 1;
+            margin: 0 10px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .diff-1-2, .diff-1-3 {
+            background-color: #ffe0b2;
+        }
+        .diff-2-3 {
+            background-color: #ffcccc;
+        }
+        .match-all {
+            background-color: #ccffcc;
+        }
+        .match-1-2, .match-1-3 {
+            background-color: #e6fffa;
+        }
+        .match-2-3 {
+            background-color: #e6f3ff;
+        }
+        .missing {
+            background-color: #f0f0f0;
+            color: #666666;
+        }
+        .highlight {
+            font-weight: bold;
+        }
+        .config, .equivalences {
+            margin-bottom: 10px;
+        }
+        .config input, .equivalences input {
+            margin-right: 10px;
+        }
+        .panel-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .titles-config {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .titles-config input {
+            width: 30%;
+        }
+        button {
+            margin-bottom: 1em;
+        }
+        .equivalence-item {
+            margin-bottom: 5px;
+        }
+        .equivalence-item input {
+            margin-right: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1em;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+		     .sql-section {
+            margin-top: 20px;
+        }
+        .sql-textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        .sql-buttons {
+            margin-bottom: 10px;
+        }
+        .sql-buttons button {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Comparador de Archivos JSON Mejorado</h1>
+    <div class="config">
+        <label for="suffix1">Sufijo 1:</label>
+        <input type="text" id="suffix1" value="_extremo">
+        <label for="suffix2">Sufijo 2:</label>
+        <input type="text" id="suffix2" value="_centro">
+        <label for="preserveOrder">
+            <input type="checkbox" id="preserveOrder" checked> Preservar orden original
+        </label>
+    </div>
+    <div class="equivalences">
+        <label for="useEquivalences">
+            <input type="checkbox" id="useEquivalences"> Usar equivalencias
+        </label>
+        <div id="equivalencesList">
+            <div class="equivalence-item">
+                <input type="text" value="0" class="eq-value1">
+                <input type="text" value="false" class="eq-value2">
+                <button onclick="removeEquivalence(this)">Eliminar</button>
+            </div>
+            <div class="equivalence-item">
+                <input type="text" value="1" class="eq-value1">
+                <input type="text" value="true" class="eq-value2">
+                <button onclick="removeEquivalence(this)">Eliminar</button>
+            </div>
+        </div>
+        <button onclick="addEquivalence()">Añadir Equivalencia</button>
+    </div>
+    <div class="titles-config">
+        <input type="text" id="title1" placeholder="Título para el panel 1">
+        <input type="text" id="title2" placeholder="Título para el panel 2">
+        <input type="text" id="title3" placeholder="Título para el panel 3">
+    </div>
+	<div class="sql-section">
+        <h3>Consultas SQL</h3>
+        <input type="text" id="identifier" placeholder="Identificador para REPLACE">
+        <div>
+            <textarea id="sqlQuery1" class="sql-textarea" placeholder="Ingrese la primera consulta SQL aquí"></textarea>
+            <div class="sql-buttons">
+                <button onclick="copySqlToClipboard('sqlQuery1')">Copiar al portapapeles</button>
+                <button onclick="updateSqlQuery('sqlQuery1')">Actualizar consulta</button>
+                <button onclick="prepareQuery()">Prepare Query</button>
+            </div>
+        </div>
+        <div>
+            <textarea id="sqlQuery2" class="sql-textarea" placeholder="Ingrese la segunda consulta SQL aquí"></textarea>
+            <div class="sql-buttons">
+                <button onclick="copySqlToClipboard('sqlQuery2')">Copiar al portapapeles</button>
+                <button onclick="updateSqlQuery('sqlQuery2')">Actualizar consulta</button>
+            </div>
+        </div>
+    </div>
+    <div>
+        <textarea id="json1" placeholder="Pegue el primer JSON aquí (usar Sufijo 1)"></textarea>
+        <textarea id="json2" placeholder="Pegue el segundo JSON aquí (usar Sufijo 2)"></textarea>
+        <textarea id="json3" placeholder="Pegue el tercer JSON aquí (usar Sufijo 1)"></textarea>
+        <textarea id="tableFields" placeholder="Ingrese los campos para las tablas, separados por comas"></textarea>
+        <input type="text" id="tableTitle1" placeholder="Título para la tabla 1">
+        <input type="text" id="tableTitle2" placeholder="Título para la tabla 2">
+        <textarea id="highlightFields" placeholder="Ingrese los campos a resaltar en negrita, separados por comas"></textarea>
+        <button id="compareButton">Comparar</button>
+    </div>
+	<div class="action-buttons">
+        <button id="exportButton">Exportar</button>
+        <button id="importButton">Importar</button>
+        <input type="file" id="fileInput" style="display: none;">
+    </div>
+    <div id="tablesContainer"></div>
+    <div class="container">
+        <div class="panel-row">
+            <div id="panel1" class="panel">
+                <div id="panelTitle1" class="panel-title"></div>
+                <div id="panelContent1"></div>
+            </div>
+            <div id="panel2" class="panel">
+                <div id="panelTitle2" class="panel-title"></div>
+                <div id="panelContent2"></div>
+            </div>
+            <div id="panel3" class="panel">
+                <div id="panelTitle3" class="panel-title"></div>
+                <div id="panelContent3"></div>
+            </div>
+        </div>
+        <div class="panel-row">
+            <div id="panel4" class="panel">
+                <div id="panelTitle4" class="panel-title"></div>
+                <div id="panelContent4"></div>
+            </div>
+            <div id="panel5" class="panel">
+                <div id="panelTitle5" class="panel-title"></div>
+                <div id="panelContent5"></div>
+            </div>
+        </div>
+    </div>
+	
+	 
+
+<script>
+        function parseJSON(json) {
+            try {
+                return JSON.parse(json);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function removeSuffix(key, suffix) {
+            return key.replace(new RegExp(`${suffix}$`), '');
+        }
+
+        function addEquivalence() {
+            const newEquivalence = `
+                <div class="equivalence-item">
+                    <input type="text" class="eq-value1">
+                    <input type="text" class="eq-value2">
+                    <button onclick="removeEquivalence(this)">Eliminar</button>
+                </div>
+            `;
+            $("#equivalencesList").append(newEquivalence);
+        }
+
+        function removeEquivalence(button) {
+            $(button).closest('.equivalence-item').remove();
+        }
+
+        function getEquivalences() {
+            const equivalences = new Map();
+            if ($("#useEquivalences").is(":checked")) {
+                $(".equivalence-item").each(function() {
+                    const value1 = $(this).find('.eq-value1').val().trim();
+                    const value2 = $(this).find('.eq-value2').val().trim();
+                    if (value1 && value2) {
+                        equivalences.set(value1, value2);
+                        equivalences.set(value2, value1);
+                    }
+                });
+            }
+            return equivalences;
+        }
+
+		function areEquivalent(value1, value2, equivalences) {
+            if (value1 === value2) return true;
+            const strValue1 = String(value1);
+            const strValue2 = String(value2);
+            return equivalences.get(strValue1) === strValue2 || equivalences.get(strValue2) === strValue1;
+        }
+
+        function generateTable(json, fields, title) {
+            let tableHtml = `<h3>${title}</h3><table><tr>`;
+            fields.forEach(field => {
+                tableHtml += `<th>${field}</th>`;
+            });
+            tableHtml += '</tr><tr>';
+
+            fields.forEach(field => {
+                const value = json[field] || '';
+                tableHtml += `<td>${value}</td>`;
+            });
+
+            tableHtml += '</tr></table>';
+            return tableHtml;
+        }
+
+        function compareJSON() {
+            console.log("Función compareJSON iniciada");
+            const suffix1 = $("#suffix1").val();
+            const suffix2 = $("#suffix2").val();
+            const preserveOrder = $("#preserveOrder").is(":checked");
+            const json1 = parseJSON($("#json1").val());
+            const json2 = parseJSON($("#json2").val());
+            const json3 = parseJSON($("#json3").val());
+            const equivalences = getEquivalences();
+            const tableFields = $("#tableFields").val().split(',').map(field => field.trim());
+            const highlightFields = $("#highlightFields").val().split(',').map(field => field.trim());
+            const tableTitle1 = $("#tableTitle1").val() || "Tabla JSON 1";
+            const tableTitle2 = $("#tableTitle2").val() || "Tabla JSON 3";
+
+            if (!json1 || !json2 || !json3) {
+                alert("Error: Uno o más JSON son inválidos");
+                return;
+            }
+
+            // Generate tables
+            const table1Html = generateTable(json1, tableFields, tableTitle1);
+            const table3Html = generateTable(json3, tableFields, tableTitle2);
+            $("#tablesContainer").html(table1Html + table3Html);
+
+            const keys1 = Object.keys(json1).filter(k => k.endsWith(suffix1));
+            const keys2 = Object.keys(json2).filter(k => k.endsWith(suffix2));
+            const keys3 = Object.keys(json3).filter(k => k.endsWith(suffix1));
+
+            let allBaseKeys = new Set([
+                ...keys1.map(k => removeSuffix(k, suffix1)),
+                ...keys2.map(k => removeSuffix(k, suffix2)),
+                ...keys3.map(k => removeSuffix(k, suffix1))
+            ]);
+
+            if (!preserveOrder) {
+                allBaseKeys = new Set([...allBaseKeys].sort());
+            }
+
+            let html1 = '', html2 = '', html3 = '', html4 = '', html5 = '';
+
+            allBaseKeys.forEach(baseKey => {
+                const key1 = keys1.find(k => removeSuffix(k, suffix1) === baseKey);
+                const key2 = keys2.find(k => removeSuffix(k, suffix2) === baseKey);
+                const key3 = keys3.find(k => removeSuffix(k, suffix1) === baseKey);
+
+                const value1 = key1 ? json1[key1] : undefined;
+                const value2 = key2 ? json2[key2] : undefined;
+                const value3 = key3 ? json3[key3] : undefined;
+
+                const match12 = areEquivalent(value1, value2, equivalences);
+                const match23 = areEquivalent(value2, value3, equivalences);
+                const match13 = areEquivalent(value1, value3, equivalences);
+                const matchAll = match12 && match23;
+
+                const shouldHighlight = highlightFields.includes(baseKey);
+                const highlightClass = shouldHighlight ? 'highlight' : '';
+
+                if (key1) {
+                    html1 += `<pre class="${matchAll ? 'match-all' : match12 ? 'match-1-2' : 'diff-1-2'} ${highlightClass}">${key1}: ${JSON.stringify(value1)}</pre>`;
+                    html4 += `<pre class="${match13 ? 'match-1-3' : 'diff-1-3'} ${highlightClass}">${key1}: ${JSON.stringify(value1)}</pre>`;
+                } else if (key3) {
+                    html4 += `<pre class="missing ${highlightClass}">${baseKey}${suffix1}: (valor faltante)</pre>`;
+                }
+
+                if (key2) {
+                    html2 += `<pre class="${matchAll ? 'match-all' : match12 && match23 ? 'match-1-2 match-2-3' : match12 ? 'match-1-2' : match23 ? 'match-2-3' : 'diff-1-2 diff-2-3'} ${highlightClass}">${key2}: ${JSON.stringify(value2)}</pre>`;
+                } else {
+                    html2 += `<pre class="missing ${highlightClass}">${baseKey}${suffix2}: (valor faltante)</pre>`;
+                }
+
+                if (key3) {
+                    html3 += `<pre class="${matchAll ? 'match-all' : match23 ? 'match-2-3' : 'diff-2-3'} ${highlightClass}">${key3}: ${JSON.stringify(value3)}</pre>`;
+                    html5 += `<pre class="${match13 ? 'match-1-3' : 'diff-1-3'} ${highlightClass}">${key3}: ${JSON.stringify(value3)}</pre>`;
+                } else if (keys2.some(k => removeSuffix(k, suffix2) === baseKey)) {
+                    html3 += `<pre class="missing ${highlightClass}">${baseKey}${suffix1}: (valor faltante)</pre>`;
+                }
+
+                if (key1 && !key3) {
+                    html5 += `<pre class="missing ${highlightClass}">${baseKey}${suffix1}: (valor faltante)</pre>`;
+                }
+            });
+
+            $("#panelContent1").html(html1);
+            $("#panelContent2").html(html2);
+            $("#panelContent3").html(html3);
+            $("#panelContent4").html(html4);
+            $("#panelContent5").html(html5);
+
+            // Actualizar títulos de los paneles
+            const title1 = $("#title1").val() || "Panel 1";
+            const title2 = $("#title2").val() || "Panel 2";
+            const title3 = $("#title3").val() || "Panel 3";
+
+            $("#panelTitle1").text(title1);
+            $("#panelTitle2").text(title2);
+            $("#panelTitle3").text(title3);
+            $("#panelTitle4").text(title1);
+            $("#panelTitle5").text(title3);
+
+            console.log("Comparación completada");
+        }
+
+        function exportConfig() {
+            const config = {
+                suffix1: $("#suffix1").val(),
+                suffix2: $("#suffix2").val(),
+                preserveOrder: $("#preserveOrder").is(":checked"),
+                useEquivalences: $("#useEquivalences").is(":checked"),
+                equivalences: [],
+                title1: $("#title1").val(),
+                title2: $("#title2").val(),
+                title3: $("#title3").val(),
+                json1: $("#json1").val(),
+                json2: $("#json2").val(),
+                json3: $("#json3").val(),
+                tableFields: $("#tableFields").val(),
+                tableTitle1: $("#tableTitle1").val(),
+                tableTitle2: $("#tableTitle2").val(),
+                highlightFields: $("#highlightFields").val(),
+                sqlQuery1: $("#sqlQuery1").val(),
+                sqlQuery2: $("#sqlQuery2").val(),
+                identifier: $("#identifier").val()
+            };
+
+            // Recoger todas las equivalencias existentes
+            $(".equivalence-item").each(function() {
+                config.equivalences.push({
+                    value1: $(this).find('.eq-value1').val(),
+                    value2: $(this).find('.eq-value2').val()
+                });
+            });
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "json_comparator_config.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function importConfig(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const config = JSON.parse(e.target.result);
+                    $("#suffix1").val(config.suffix1);
+                    $("#suffix2").val(config.suffix2);
+                    $("#preserveOrder").prop("checked", config.preserveOrder);
+                    $("#useEquivalences").prop("checked", config.useEquivalences);
+                    $("#title1").val(config.title1);
+                    $("#title2").val(config.title2);
+                    $("#title3").val(config.title3);
+                    $("#json1").val(config.json1);
+                    $("#json2").val(config.json2);
+                    $("#json3").val(config.json3);
+                    $("#tableFields").val(config.tableFields);
+                    $("#tableTitle1").val(config.tableTitle1);
+                    $("#tableTitle2").val(config.tableTitle2);
+                    $("#highlightFields").val(config.highlightFields);
+                    $("#sqlQuery1").val(config.sqlQuery1);
+                    $("#sqlQuery2").val(config.sqlQuery2);
+                    $("#identifier").val(config.identifier);
+
+                    // Limpiar equivalencias existentes y recrear las importadas
+                    $("#equivalencesList").empty();
+                    if (Array.isArray(config.equivalences)) {
+                        config.equivalences.forEach(eq => {
+                            addEquivalence(eq.value1, eq.value2);
+                        });
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+		
+		    function addEquivalence(value1 = '', value2 = '') {
+            const newEquivalence = `
+                <div class="equivalence-item">
+                    <input type="text" class="eq-value1" value="${value1}">
+                    <input type="text" class="eq-value2" value="${value2}">
+                    <button onclick="removeEquivalence(this)">Eliminar</button>
+                </div>
+            `;
+            $("#equivalencesList").append(newEquivalence);
+        }
+
+        function removeEquivalence(button) {
+            $(button).closest('.equivalence-item').remove();
+        }
+		
+		   function copySqlToClipboard(textareaId) {
+            const textarea = document.getElementById(textareaId);
+            textarea.select();
+            document.execCommand('copy');
+            alert('Consulta SQL copiada al portapapeles');
+        }
+
+        function updateSqlQuery(textareaId) {
+            const textarea = document.getElementById(textareaId);
+            const identifier = document.getElementById('identifier').value;
+            const updatedQuery = textarea.value.replace(/REPLACE:identificador/g, identifier);
+            textarea.value = updatedQuery;
+        }
+
+        function prepareQuery() {
+            const textarea = document.getElementById('sqlQuery1');
+            const json2 = parseJSON($("#json2").val());
+            if (!json2) {
+                alert("Error: El JSON 2 no es válido");
+                return;
+            }
+
+            let updatedQuery = textarea.value;
+            const replacePattern = /REPLACE:(\w+)/g;
+            const matches = updatedQuery.match(replacePattern);
+
+            if (matches) {
+                matches.forEach(match => {
+                    const fieldName = match.split(':')[1];
+                    const fieldValue = json2[fieldName]; // Asumiendo que los campos en json2 terminan en '_actual'
+                    if (fieldValue !== undefined) {
+                        updatedQuery = updatedQuery.replace(match, JSON.stringify(fieldValue));
+                    }
+                });
+            }
+
+            textarea.value = updatedQuery;
+        }
+
+        $(document).ready(function() {
+            $("#compareButton").on("click", compareJSON);
+            $("#exportButton").on("click", exportConfig);
+            $("#importButton").on("click", function() {
+                $("#fileInput").click();
+            });
+            $("#fileInput").on("change", importConfig);
+        });
+    </script>
+</body>
+</html>
