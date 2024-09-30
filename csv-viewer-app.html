@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de CSV</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .data-section {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Visor de CSV</h1>
+        
+        <div class="mb-3">
+            <label for="csvFile" class="form-label">Seleccionar archivo CSV:</label>
+            <input type="file" class="form-control" id="csvFile" accept=".csv">
+        </div>
+        
+        <div class="mb-3">
+            <label for="clientIdFilter" class="form-label">Filtrar por Client ID:</label>
+            <input type="text" class="form-control" id="clientIdFilter">
+        </div>
+        
+        <div class="mb-3">
+            <label for="recordSelector" class="form-label">Seleccionar registro:</label>
+            <select class="form-select" id="recordSelector"></select>
+        </div>
+        
+        <div class="mb-3">
+            <label for="errorTypeSelector" class="form-label">Seleccionar tipo de errores:</label>
+            <select class="form-select" id="errorTypeSelector">
+                <option value="detected_errors_to_correct">Errores detectados a corregir</option>
+                <option value="errors_excluded_from_correction">Errores que se van a ignorar</option>
+                <option value="unresolved_errors">Errores que no se lograron corregir</option>
+            </select>
+        </div>
+        
+        <h2>1. Datos Generales</h2>
+        <div class="data-section">
+            <table class="table table-bordered" id="generalDataTable">
+                <thead>
+                    <tr>
+                        <th>Client ID</th>
+                        <th>Transaction ID</th>
+                        <th>Status</th>
+                        <th>Job Version</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        
+        <h2>2. Datos Faltantes</h2>
+        <div class="data-section" id="missingDataSection"></div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <h2>3. Atributos faltantes en los Datos Personales</h2>
+                <div class="data-section" id="missingAttributesSection"></div>
+            </div>
+            <div class="col-md-6">
+                <h2>4. Atributos inválidos en los Datos Personales</h2>
+                <div class="data-section" id="invalidAttributesSection"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script>
+        let csvData = [];
+        let headers = [];
+        let currentRecord = null;
+
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            Papa.parse(file, {
+                complete: function(results) {
+                    csvData = results.data;
+                    headers = csvData[0];
+                    updateRecordSelector();
+                }
+            });
+        });
+
+        document.getElementById('clientIdFilter').addEventListener('input', updateRecordSelector);
+
+        document.getElementById('recordSelector').addEventListener('change', function(e) {
+            currentRecord = csvData.find(row => row[getColumnIndex('client_id')] === e.target.value);
+            if (currentRecord) {
+                updateGeneralDataTable(currentRecord);
+                updateAllSections();
+            }
+        });
+
+        document.getElementById('errorTypeSelector').addEventListener('change', function() {
+            if (currentRecord) {
+                updateAllSections();
+            }
+        });
+
+        function getColumnIndex(columnName) {
+            return headers.findIndex(header => header.toLowerCase() === columnName.toLowerCase());
+        }
+
+        function updateRecordSelector() {
+            const selector = document.getElementById('recordSelector');
+            const filter = document.getElementById('clientIdFilter').value.toLowerCase();
+            
+            selector.innerHTML = '';
+            csvData.slice(1).forEach(row => {
+                const clientId = row[getColumnIndex('client_id')];
+                const jobVersion = row[getColumnIndex('job_version')];
+                if (clientId.toLowerCase().includes(filter)) {
+                    const option = document.createElement('option');
+                    option.value = clientId;
+                    option.textContent = `${clientId} - ${jobVersion}`;
+                    selector.appendChild(option);
+                }
+            });
+        }
+
+        function updateGeneralDataTable(record) {
+            const table = document.getElementById('generalDataTable').getElementsByTagName('tbody')[0];
+            table.innerHTML = `
+                <tr>
+                    <td>${record[getColumnIndex('client_id')]}</td>
+                    <td>${record[getColumnIndex('transaction_id')]}</td>
+                    <td>${record[getColumnIndex('status')]}</td>
+                    <td>${record[getColumnIndex('job_version')]}</td>
+                </tr>
+            `;
+        }
+
+        function updateAllSections() {
+            const errorType = document.getElementById('errorTypeSelector').value;
+            updateMissingDataSection(currentRecord, errorType);
+            updateMissingAttributesSection(currentRecord, errorType);
+            updateInvalidAttributesSection(currentRecord, errorType);
+        }
+
+        function updateMissingDataSection(record, errorType) {
+            const section = document.getElementById('missingDataSection');
+            section.innerHTML = '';
+
+            try {
+                const errorIndex = getColumnIndex(errorType);
+                if (errorIndex === -1) {
+                    throw new Error(`${errorType} column not found`);
+                }
+                const errors = JSON.parse(record[errorIndex]);
+                const missingPersonalData = errors.missing_personal_data;
+
+                if (!missingPersonalData) {
+                    throw new Error('missing_personal_data not found in errors');
+                }
+
+                for (const [category, data] of Object.entries(missingPersonalData)) {
+                    const table = document.createElement('table');
+                    table.className = 'table table-bordered mt-3';
+                    table.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th colspan="3">${category.charAt(0).toUpperCase() + category.slice(1)}</th>
+                            </tr>
+                            <tr>
+                                <th>Columna</th>
+                                <th>Valor de Cash</th>
+                                <th>Valor esperado en Clients Service</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.entries(data).map(([key, value]) => `
+                                <tr>
+                                    <td>${key}</td>
+                                    <td>${value.source_value}</td>
+                                    <td>${value.expected_value}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    `;
+                    section.appendChild(table);
+                }
+            } catch (error) {
+                console.error(`Error processing ${errorType}:`, error);
+                section.innerHTML = `<p class="text-danger">Error al procesar los datos faltantes para ${errorType}.</p>`;
+            }
+        }
+
+        function updateMissingAttributesSection(record, errorType) {
+            const section = document.getElementById('missingAttributesSection');
+            section.innerHTML = '';
+
+            try {
+                const errors = JSON.parse(record[getColumnIndex(errorType)]);
+                const missingAttributes = errors.missing_personal_data_attributes;
+
+                if (!missingAttributes) {
+                    throw new Error('missing_personal_data_attributes not found');
+                }
+
+                const table = document.createElement('table');
+                table.className = 'table table-bordered mt-3';
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Tabla</th>
+                            <th>Columna</th>
+                            <th>Valor en Cash</th>
+                            <th>Valor esperado en Clients Service según Cash</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(missingAttributes).map(([key, value]) => {
+                            const [table, column] = key.split('__');
+                            return `
+                                <tr>
+                                    <td>${table}</td>
+                                    <td>${column}</td>
+                                    <td>${value.source_value}</td>
+                                    <td>${value.expected_value}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                `;
+                section.appendChild(table);
+            } catch (error) {
+                console.error(`Error processing missing attributes for ${errorType}:`, error);
+                section.innerHTML = `<p class="text-danger">Error al procesar los atributos faltantes para ${errorType}.</p>`;
+            }
+        }
+
+        function updateInvalidAttributesSection(record, errorType) {
+            const section = document.getElementById('invalidAttributesSection');
+            section.innerHTML = '';
+
+            try {
+                const errors = JSON.parse(record[getColumnIndex(errorType)]);
+                const invalidAttributes = errors.invalid_personal_data_attributes;
+
+                if (!invalidAttributes) {
+                    throw new Error('invalid_personal_data_attributes not found');
+                }
+
+                const table = document.createElement('table');
+                table.className = 'table table-bordered mt-3';
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Tabla</th>
+                            <th>Columna</th>
+                            <th>Valor en Cash</th>
+                            <th>Valor esperado en Clients Service según Cash</th>
+                            <th>Valor actual en Clients Service</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(invalidAttributes).map(([key, value]) => {
+                            const [table, column] = key.split('__');
+                            return `
+                                <tr>
+                                    <td>${table}</td>
+                                    <td>${column}</td>
+                                    <td>${value.source_value}</td>
+                                    <td>${value.expected_value}</td>
+                                    <td>${value.current_value}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                `;
+                section.appendChild(table);
+            } catch (error) {
+                console.error(`Error processing invalid attributes for ${errorType}:`, error);
+                section.innerHTML = `<p class="text-danger">Error al procesar los atributos inválidos para ${errorType}.</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
